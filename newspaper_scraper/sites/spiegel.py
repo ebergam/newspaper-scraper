@@ -51,7 +51,7 @@ class DeSpiegel(NewspaperManager):
                 information.
         """
         url = f'https://www.spiegel.de/nachrichtenarchiv/artikel-{day.strftime("%d.%m.%Y")}.html'
-
+        # print(url)
         html = self._request(url)
         if html is None:
             return []
@@ -63,6 +63,7 @@ class DeSpiegel(NewspaperManager):
             .find_all("div", {"data-block-el": "articleTeaser"})
         # Remove advertisement articles
         articles = [article for article in articles if not article.find("h3")]
+
         # Get articles urls
         urls = [article.find('a')['href'] for article in articles]
         # Get articles publication dates
@@ -91,10 +92,23 @@ class DeSpiegel(NewspaperManager):
             str: Html of the article. If the article is premium content, None is returned.
             bool: True if the article is premium content, False otherwise.
         """
-        html = self._request(url)
-        soup = BeautifulSoup(html, "html.parser")
+        if 'http' in url:
+            html = self._request(url)
+        else: 
+            url = 'https://spiegel.de/'+url
+            html = self._request(url)
+        # log.info(url)
+
+        if html is None:
+            log.warning(f"Problem requesting: {url}")
+            return None, False       
         try:
-            premium_icon = soup.find("header", {"data-area": "intro"}).find('svg', {"id": "spon-spplus-flag-l"})
+            soup = BeautifulSoup(html, "html.parser")   
+        except Exception as e:
+            info.warining(f"Error parsing bs: {url}")
+            return None, False 
+        try:
+            premium_icon = soup.find("header", {"data-area": "intro"}).find('svg', {"id": "spon-spon-paid-flag-l"})
             return html, not bool(premium_icon)
         except AttributeError:
             log.warning(f'Could not identify if article is premium: {url}.')
@@ -119,12 +133,17 @@ class DeSpiegel(NewspaperManager):
 
         # Go to main page and accept cookies
         self.selenium_driver.get('https://www.spiegel.de/')
-        privacy_frame = WebDriverWait(self.selenium_driver, 10).until(
+
+        privacy_frame = WebDriverWait(self.selenium_driver, 20).until(
             ec.presence_of_element_located((By.XPATH, '//iframe[@title="Privacy Center"]')))
         self.selenium_driver.switch_to.frame(privacy_frame)
-        self.selenium_driver.find_element(By.XPATH, "//button[contains(text(), 'Akzeptieren und weiter')]").click()
+        # time.sleep(5)
+        WebDriverWait(self.selenium_driver, 10).until(
+            ec.presence_of_element_located((By.XPATH, '//*[@id="notice"]/div[3]/div[1]/button'))).click()
 
-        # Click on Anmelden button because sometimes the login is not saved on main page
+        self.selenium_driver.switch_to.default_content()
+
+        # # Click on Anmelden button because sometimes the login is not saved on main page
         try:
             self.selenium_driver.find_element(By.XPATH, '//a[@data-sara-link="gruppenkonto"]').click()
         except ElementNotInteractableException:

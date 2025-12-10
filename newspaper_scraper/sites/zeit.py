@@ -33,7 +33,8 @@ class DeZeit(NewspaperManager):
     def __init__(self, db_file: str = 'articles.db'):
         super().__init__(db_file)
 
-    def _get_articles_by_edition(self, year: int, edition: int):
+
+    def _get_articles_by_editions(self, year: int, edition: int):
         """
         Index articles published in a given edition and return the urls and publication dates.
 
@@ -49,6 +50,7 @@ class DeZeit(NewspaperManager):
         url = f'https://www.zeit.de/{year}/{edition:02}/index'
 
         html = self._request(url)
+
         if html is None:
             return []
         soup = BeautifulSoup(html, "html.parser")
@@ -59,6 +61,7 @@ class DeZeit(NewspaperManager):
         urls = [article.find('a')['href'] for article in articles]
         urls = [url for url in urls if url.startswith('https://www.zeit.de/')]
 
+        
         # Remove duplicates
         old_len = len(urls)
         urls = list(set(urls))
@@ -77,20 +80,37 @@ class DeZeit(NewspaperManager):
             str: Html of the article. If the article is premium content, None is returned.
             bool: True if the article is premium content, False otherwise.
         """
-        html = self._request(url)
-        soup = BeautifulSoup(html, "html.parser")
+        import traceback
+        try:            
+            html = self._request(url)
+            # log.info(url)
 
-        # Run again with /komplettansicht if a full page exists
-        komplettansicht_link = soup.find("a", href=f"{url}/komplettansicht")
-        if komplettansicht_link:
-            return self._soup_get_html(f"{url}/komplettansicht")
+            if html is None:
+                log.warning(f"Problem requesting: {url}")
+                return None, False       
+            try:
+                soup = BeautifulSoup(html, "html.parser")
+            except Exception as e:
+                info.warining(f"Error parsing bs: {url}")
+                return None, False 
 
-        try:
-            premium_icon = soup.find('aside', {'id': 'paywall'})
-            return html, not bool(premium_icon)
-        except AttributeError:
-            log.warning(f'Could not identify if article is premium: {url}.')
+            # Run again with /komplettansicht if a full page exists
+            komplettansicht_link = soup.find("a", href=f"{url}/komplettansicht")
+            
+            # log.info(komplettansicht_link)
+            
+            if komplettansicht_link:
+                return self._soup_get_html(f"{url}/komplettansicht")
+            try:
+                premium_icon = soup.find('aside', {'id': 'paywall'})
+                return html, not bool(premium_icon)
+            except AttributeError:
+                log.warning(f'Could not identify if article is premium: {url}.')
+                return None, False
+        except TypeError:
+            print(traceback.format_exc())
             return None, False
+
 
     def _selenium_login(self, username: str, password: str):
         """
@@ -108,18 +128,37 @@ class DeZeit(NewspaperManager):
         self.selenium_driver.find_element(By.XPATH, '//input[@type="password"]').send_keys(password)
         self.selenium_driver.find_element(By.XPATH, '//input[@type="submit"]').click()
 
-        # Accept cookies
-        privacy_frame = WebDriverWait(self.selenium_driver, 10).until(
-            ec.presence_of_element_located((By.XPATH, '//iframe[@title="SP Consent Message"]')))
+        # confirm = WebDriverWait(self.selenium_driver, 60).until(
+        #     ec.presence_of_element_located((By.XPATH, '//*[@id="kc-login"]')))
+
+        # self.selenium_driver.find_element(By.XPATH, '//*[@id="kc-login"]').click()
+
+        from selenium.webdriver.support import expected_conditions as EC
+        
+        confirm = WebDriverWait(self.selenium_driver, 60).until(
+            EC.element_to_be_clickable((By.XPATH, '//*[@id="kc-login"]'))
+        )
+
+        confirm.click()
+
+        self.selenium_driver.get('https://www.zeit.de/index')
+
+        # # Accept cookies
+        privacy_frame = WebDriverWait(self.selenium_driver, 20).until(
+            ec.presence_of_element_located((By.XPATH, '//iframe[@title="Consent Message"]')))
         self.selenium_driver.switch_to.frame(privacy_frame)
-        cookie_accept_button = WebDriverWait(self.selenium_driver, 10).until(
-            ec.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'AKZEPTIEREN UND WEITER')]")))
+
+        # time.sleep
+        cookie_accept_button = WebDriverWait(self.selenium_driver, 20).until(
+            ec.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Agree and continue')]")))
         cookie_accept_button.click()
 
         # Check if login was successful
+        self.selenium_driver.switch_to.default_content()
+        
         try:
             WebDriverWait(self.selenium_driver, 10).until(
-                ec.presence_of_element_located((By.XPATH, '//span[@class="dashboard__title"]')))
+                ec.presence_of_element_located((By.XPATH, '//div[@data-render="dashboard"]')))
             log.info('Logged in to Zeit Plus.')
             return True
         except TimeoutException:
@@ -133,9 +172,10 @@ class DeZeit(NewspaperManager):
         """
         self.selenium_driver.get(url)
         try:
-            self.selenium_driver.find_element(By.XPATH, f"//a[@href='{url}/komplettansicht']")
+            self.selenium_driver.find_element(By.XPATH, f'//a[@href="{url}/komplettansicht"]')
             self.selenium_driver.get(url + '/komplettansicht')
         except NoSuchElementException:
+            # print(traceback.format_exc())
             pass
 
         return self.selenium_driver.page_source

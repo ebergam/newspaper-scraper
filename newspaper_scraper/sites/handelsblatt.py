@@ -43,30 +43,55 @@ class DeHandelsblatt(NewspaperManager):
             [dt.datetime]: List of publication dates of the articles published on the given day. Needs timezone
                 information.
         """
-        url = f'https://www.handelsblatt.com/archiv/{day.strftime("%Y/%-m/%-d")}'
-
+        # url = f'https://www.handelsblatt.com/archiv/{day.strftime("%Y/%m/%d")}'
+        # print(url)
+        url = f'https://archiv.handelsblatt.com/dosearch?explicitSearch=true&q=&x=0&y=0&dbShortcut=HBARCHIV_HANDELSBLATT_NAVIGATION&searchMask=7009&TI%2CUT%2CDZ%2CBT%2COT%2CSL=&KO%2CRU=&AU=&CO%2CC2%2CTA%2CKA%2CVA%2CZ1=&MM%2COW%2CUF%2CMF%2CAO%2CTP%2CVM%2CNN%2CNJ%2CKV%2CZ2%2CSAT-PERSONS.name=&CT=&CT%2CDE%2CZ4%2CKW=&BR%2CGW%2CN1%2CN2%2CNC%2CND%2CSC%2CWZ%2CZ5%2CAI%2CBC%2CKN%2CTN%2CVN%2CK0%2CB4%2CNW%2CVH=&Z3%2CCN%2CCE%2CKC%2CTC%2CVC=&timeFilterType=on&DT_from={day.strftime("%d.%m.%Y")}&DT_to={day.strftime("%d.%m.%Y")}'
         html = self._request(url)
         if html is None:
             return []
         soup = BeautifulSoup(html, "html.parser")
 
         # Get list of article elements
-        articles = soup.find_all("a", {"class": "vhb-teaser-link"})
-        # Get article urls
-        urls = ['https://www.handelsblatt.com' + article['href'] for article in articles]
-        # Also add paginated articles
-        pages_exist = soup.find("div", {"class": "vhb-teaser-pagination"})
-        if pages_exist:
-            page_urls = pages_exist.find("div", {"class": "vhb-tp-list"}).find_all('a')
-            page_urls = ['https://www.handelsblatt.com' + page_url['href'] for page_url in page_urls]
+        # articles = soup.find_all("span", {"class": "hitContent"})
 
-            for page_url in page_urls:
-                html = self._request(page_url)
-                soup = BeautifulSoup(html, "html.parser")
-                # Get list of article elements
-                articles = soup.find_all("a", {"class": "vhb-teaser-link"})
-                # Add article urls to list
-                [urls.append('https://www.handelsblatt.com' + article['href']) for article in articles]
+        # # Get article urls
+        # urls = ['https://www.handelsblatt.com' + article['a']['href'] for article in articles]
+
+        # # Also add paginated articles
+        # pages_exist = soup.find("div", {"class": "vhb-teaser-pagination"})
+        # if pages_exist:
+        #     page_urls = pages_exist.find("div", {"class": "vhb-tp-list"}).find_all('a')
+        #     page_urls = ['https://www.handelsblatt.com' + page_url['href'] for page_url in page_urls]
+
+        #     for page_url in page_urls:
+        #         html = self._request(page_url)
+        #         soup = BeautifulSoup(html, "html.parser")
+        #         # Get list of article elements
+        #         articles = soup.find_all("a", {"class": "vhb-teaser-link"})
+        #         # Add article urls to list
+        #         [urls.append('https://www.handelsblatt.com' + article['href']) for article in articles]
+        urls = []
+        hits = soup.find_all("div", class_="hit")
+
+        for hit in hits:
+            link_tag = hit.find("a", href=True)
+            if link_tag and link_tag["href"].startswith("/"):
+                urls.append(base_url + link_tag["href"])
+
+        # === Handle pagination ===
+        pagination = soup.find("div", class_="pagination")
+        if pagination:
+            page_links = [a["href"] for a in pagination.find_all("a", href=True) if "dosearch" in a["href"]]
+            page_links = [base_url + href for href in page_links]
+
+            for page_url in page_links:
+                html_page = self._request(page_url)
+                soup_page = BeautifulSoup(html_page, "html.parser")
+                hits_page = soup_page.find_all("div", class_="hit")
+                for hit in hits_page:
+                    link_tag = hit.find("a", href=True)
+                    if link_tag and link_tag["href"].startswith("/"):
+                        urls.append(base_url + link_tag["href"])
 
         # Remove duplicates
         old_len = len(urls)

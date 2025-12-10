@@ -149,7 +149,7 @@ class NewspaperManager:
 
         return parsed_infos
 
-    @retry_on_exception
+    # @retry_on_exception
     def index_articles_by_date_range(self, date_from, date_to, freq='D', skip_existing=True):
         """
         Indexes all articles published between date_from and date_to for a given newspaper. Indexing means that the
@@ -162,6 +162,7 @@ class NewspaperManager:
             freq (str, optional): The frequency of the date range. Defaults to 'D'.
             skip_existing (bool, optional): If True, days that are already indexed are skipped. Defaults to True.
         """
+
         date_from = pd.to_datetime(date_from)
         date_to = pd.to_datetime(date_to)
 
@@ -169,19 +170,30 @@ class NewspaperManager:
 
         # Convert already_indexed.PubDateIndexPage to set of dates for faster lookup
         indexed_dates = {index_day.date() for index_day in already_indexed.PubDateIndexPage}
+        
+
         # Create pd.date_range and convert it to a numpy array of dates for faster lookup
+        
+
         date_range = pd.date_range(date_from, date_to, freq=freq)
+        
         date_range_dates = np.array([day.date() for day in date_range])
+        # print(f"Total dates {len(date_range)}")
+
+        print(len(date_range))
+        print(len(indexed_dates))
+        
 
         if skip_existing:
             date_range = date_range[~np.in1d(date_range_dates, list(indexed_dates))]
         else:
             date_range = date_range.tolist()
 
+        # print(f"Total dates {len(date_range)}")
         if len(date_range) == 0:
             log.info(f'No new days to scrape. Pass skip_existing=False to scrape all days again.')
             return
-
+            
         log.info(f'Start scraping articles for {len(date_range):,} days ({date_from.strftime("%d.%m.%y")} - '
                  f'{date_to.strftime("%d.%m.%y")}). {len(pd.date_range(date_from, date_to)) - len(date_range):,} '
                  f'days already indexed.')
@@ -191,7 +203,7 @@ class NewspaperManager:
                 counter += 1
 
                 urls, pub_dates = self._get_articles_by_date(day)
-
+                
                 # Remove query strings from urls
                 urls = [url.split('?')[0] for url in urls]
 
@@ -227,7 +239,7 @@ class NewspaperManager:
 
                 self._db.save_data('df_indexed', mode='replace')
 
-    @retry_on_exception
+    # @retry_on_exception
     def index_articles_by_editions(self, edition_from: str, edition_to: str, editions_per_year=55, skip_existing=True):
         """
         Index all articles published in between two editions for a given newspaper. Indexing means that the
@@ -288,7 +300,7 @@ class NewspaperManager:
                 year = int(edition.split('-')[0])
                 edition = int(edition.split('-')[1])
 
-                urls = self._get_articles_by_edition(year, edition)
+                urls = self._get_articles_by_editions(year, edition)
 
                 # Remove query strings from urls
                 urls = [url.split('?')[0] for url in urls]
@@ -469,7 +481,7 @@ class NewspaperManager:
         """
         raise NotImplemented
 
-    def _get_articles_by_edition(self, year, edition):
+    def _get_articles_by_editions(self, year, edition):
         """
         Exists only as a placeholder. Needs to be implemented by the child class for each newspaper.
         """

@@ -3,6 +3,10 @@ This module contains the package-wide settings.
 """
 from .utils import logger
 
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+# driver = 
+
 class _Settings:
     """
     This class contains the package-wide settings. It should not be instantiated and only used via the settings
@@ -13,8 +17,10 @@ class _Settings:
     _log_level = 'DEBUG'
     retry_on_exception = True
     save_interval = 60
-    selenium_driver = None
-
+    # selenium_driver = webdriver.Chrome(ChromeDriverManager().install())
+    # selenium_driver = "C:\\Users\\Enrico\\Documents\\chromedriver.exe"
+    selenium_driver = webdriver.Chrome()
+    
     _description = {
         'log_file': 'Path to the log file. If None, no log file is created.',
         'log_level': 'Log level. Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL.',
